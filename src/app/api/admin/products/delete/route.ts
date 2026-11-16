@@ -1,0 +1,2 @@
+import {NextRequest,NextResponse} from "next/server";import {isAdmin} from "@/lib/auth";import {pool,initDb} from "@/lib/db";
+export async function DELETE(req:NextRequest){if(!await isAdmin())return NextResponse.json({error:"unauthorized"},{status:401});await initDb();const id=req.nextUrl.searchParams.get("id");if(!id||!/^\d+$/.test(id))return NextResponse.json({error:"invalid_id"},{status:400});const r=await pool.query("DELETE FROM v_products WHERE id=$1",[id]);if(!r.rowCount)return NextResponse.json({error:"not_found"},{status:404});return NextResponse.json({ok:true});}
