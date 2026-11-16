@@ -31,6 +31,7 @@ export async function initDb(){if(initPromise)return initPromise;initPromise=(as
  await pool.query(`ALTER TABLE v_customers ADD COLUMN IF NOT EXISTS username VARCHAR(40) NULL`);
  await pool.query(`ALTER TABLE v_customers ADD COLUMN IF NOT EXISTS bio TEXT NULL`);
  await pool.query(`ALTER TABLE v_customers ADD COLUMN IF NOT EXISTS skills JSON NULL`);
+ await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_v_customers_username ON v_customers(username)`);
  await pool.query(`CREATE TABLE IF NOT EXISTS v_schema_migrations (version VARCHAR(100) NOT NULL PRIMARY KEY,applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
  const legacyVerificationMigration=await pool.query(`INSERT IGNORE INTO v_schema_migrations(version) VALUES('legacy-customers-email-verified-once')`);
  if(legacyVerificationMigration.rowCount>0) await pool.query(`UPDATE v_customers SET email_verified_at=created_at WHERE email_verified_at IS NULL`);
