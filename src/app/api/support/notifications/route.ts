@@ -1,0 +1,2 @@
+import {NextResponse} from "next/server";import {pool,initDb} from "@/lib/db";import {currentCustomer} from "@/lib/customer-auth";
+export async function GET(){const c=await currentCustomer();if(!c)return NextResponse.json({count:0});await initDb();const r=await pool.query("SELECT COUNT(*) AS count FROM v_support_messages m JOIN v_support_tickets t ON t.id=m.ticket_id WHERE t.customer_id=$1 AND m.sender_type='admin' AND m.read_at IS NULL",[c.id]);return NextResponse.json({count:Number(r.rows[0]?.count||0)});}
