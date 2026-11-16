@@ -20,7 +20,7 @@ export const pool={async query<T=any>(input:string,values:any[]=[]):Promise<Resu
 }};
 let initPromise:Promise<void>|null=null;
 export async function initDb(){if(initPromise)return initPromise;initPromise=(async()=>{
- await pool.query("CREATE TABLE IF NOT EXISTS v_settings (`key` VARCHAR(191) NOT NULL PRIMARY KEY,value JSON NOT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
+ await pool.query(`CREATE TABLE IF NOT EXISTS v_settings (`key` VARCHAR(191) NOT NULL PRIMARY KEY,value JSON NOT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`);
  await pool.query(`CREATE TABLE IF NOT EXISTS v_products (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,title VARCHAR(180) NOT NULL,description TEXT,price DECIMAL(12,2) NOT NULL DEFAULT 0,currency VARCHAR(8) NOT NULL DEFAULT 'USD',image_url TEXT,category VARCHAR(100) DEFAULT 'عام',stock INT NOT NULL DEFAULT 0,status VARCHAR(20) NOT NULL DEFAULT 'published',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_products_created(created_at),INDEX idx_products_status(status))`);
  await pool.query(`CREATE TABLE IF NOT EXISTS v_submissions (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,payload JSON NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'pending',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_submissions_created(created_at))`);
  await pool.query(`CREATE TABLE IF NOT EXISTS v_audit (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,actor VARCHAR(100) NOT NULL,action VARCHAR(180) NOT NULL,entity VARCHAR(100),entity_id VARCHAR(100),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
