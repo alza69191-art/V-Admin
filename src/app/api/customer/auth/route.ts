@@ -29,10 +29,11 @@ export async function POST(req:NextRequest){
   if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});
   const normalized=String(body.email||"").trim().toLowerCase();
   const password=String(body.password||"");
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)||password.length<10||password.length>128)
-   return NextResponse.json({error:"أدخل بريداً صحيحاً وكلمة مرور من 10 أحرف على الأقل"},{status:400});
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)||password.length<1||password.length>128)
+   return NextResponse.json({error:"أدخل بريداً صحيحاً وكلمة مرور صالحة."},{status:400});
   let user:any;
   if(action==="register"){
+   if(password.length<10)return NextResponse.json({error:"كلمة المرور يجب ألا تقل عن 10 أحرف."},{status:400});
    const name=String(body.name||"").trim().slice(0,120);
    const accountType=String(body.accountType||"buyer");
    if(name.length<2||!["buyer","freelancer","both"].includes(accountType))
