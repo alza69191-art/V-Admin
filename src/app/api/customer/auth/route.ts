@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import {createHash,randomInt} from "crypto";
 import {pool,initDb} from "@/lib/db";
 import {verifyTurnstile} from "@/lib/turnstile";
+import {enforceRateLimit} from "@/lib/rate-limit";
 import {issueCustomerSession,currentCustomer} from "@/lib/customer-auth";
 
 export const dynamic="force-dynamic";
@@ -28,6 +29,8 @@ export async function POST(req:NextRequest){
   const action=String(body.action||"");
   if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});
   const normalized=String(body.email||"").trim().toLowerCase();
+  const rate=await enforceRateLimit(req,"customer-auth",12,900,normalized);
+  if(!rate.allowed)return NextResponse.json({error:"تم تجاوز عدد المحاولات المسموح. حاول لاحقاً."},{status:429,headers:{"Retry-After":String(rate.retryAfter),"Cache-Control":"no-store"}});
   const password=String(body.password||"");
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)||password.length<1||password.length>128)
    return NextResponse.json({error:"أدخل بريداً صحيحاً وكلمة مرور صالحة."},{status:400});
