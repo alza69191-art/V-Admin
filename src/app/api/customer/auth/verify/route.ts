@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {createHash} from "crypto";
 import {pool,initDb} from "@/lib/db";
 import {verifyTurnstile} from "@/lib/turnstile";
+import {enforceRateLimit} from "@/lib/rate-limit";
 import {issueCustomerSession} from "@/lib/customer-auth";
 export const dynamic="force-dynamic";
 export async function POST(req:NextRequest){
@@ -10,6 +11,8 @@ export async function POST(req:NextRequest){
   const body=await req.json().catch(()=>({}));
   if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});
   const email=String(body.email||"").trim().toLowerCase();
+  const rate=await enforceRateLimit(req,"customer-verify",10,900,email);
+  if(!rate.allowed)return NextResponse.json({error:"تم تجاوز عدد المحاولات المسموح. حاول لاحقاً."},{status:429,headers:{"Retry-After":String(rate.retryAfter),"Cache-Control":"no-store"}});
   const code=String(body.code||"").trim();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code))return NextResponse.json({error:"أدخل البريد ورمز التأكيد المكوّن من 6 أرقام."},{status:400});
   const digest=createHash("sha256").update(code).digest("hex");
