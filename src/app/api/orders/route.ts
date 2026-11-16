@@ -12,8 +12,6 @@ export async function GET(){
   if(!customer)return NextResponse.json({error:"login_required"},{status:401});
   try{
     await initDb();
-    const rate=await enforceRateLimit(req,"orders-create",10,900,String(customer.id));
-    if(!rate.allowed)return NextResponse.json({error:"تم تجاوز عدد المحاولات المسموح. حاول لاحقاً."},{status:429,headers:{"Retry-After":String(rate.retryAfter),"Cache-Control":"no-store"}});
     const orders=await pool.query("SELECT id,order_number,status,currency,total,created_at FROM v_orders WHERE customer_id=$1 ORDER BY created_at DESC LIMIT 50",[customer.id]);
     if(!orders.rows.length)return NextResponse.json([]);
     const ids=orders.rows.map((x:any)=>Number(x.id));
@@ -31,6 +29,8 @@ export async function POST(req:NextRequest){
   if(!customer) return NextResponse.json({error:"login_required"},{status:401});
   try{
     await initDb();
+    const rate=await enforceRateLimit(req,"orders-create",10,900,String(customer.id));
+    if(!rate.allowed)return NextResponse.json({error:"تم تجاوز عدد المحاولات المسموح. حاول لاحقاً."},{status:429,headers:{"Retry-After":String(rate.retryAfter),"Cache-Control":"no-store"}});
     const body=await req.json();
     const paymentMethod=String(body.paymentMethod||"manual");
     if(paymentMethod!=="manual"&&paymentMethod!=="escrowly") return NextResponse.json({error:"invalid_payment_method"},{status:400});
