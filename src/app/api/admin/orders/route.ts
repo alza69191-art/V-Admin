@@ -10,9 +10,11 @@ export async function GET(){
  if(!orders.rows.length)return NextResponse.json([]);
  const ids=orders.rows.map((x:any)=>Number(x.id));
  const items=await pool.query(`SELECT * FROM v_order_items WHERE order_id IN (${ids.map((_,i)=>"$"+(i+1)).join(",")}) ORDER BY id ASC`,ids);
+ const escrows=await pool.query(`SELECT * FROM v_order_escrows WHERE order_id IN (${ids.map((_,i)=>"$"+(i+1)).join(",")})`,ids);
  const grouped=new Map<number,any[]>();
  for(const item of items.rows){const id=Number(item.order_id);if(!grouped.has(id))grouped.set(id,[]);grouped.get(id)!.push(item);}
- return NextResponse.json(orders.rows.map((o:any)=>({...o,items:grouped.get(Number(o.id))||[]})));
+ const escrowByOrder=new Map<number,any>(escrows.rows.map((e:any)=>[Number(e.order_id),e]));
+ return NextResponse.json(orders.rows.map((o:any)=>({...o,items:grouped.get(Number(o.id))||[],escrow:escrowByOrder.get(Number(o.id))||null})));
 }
 export async function PATCH(req:NextRequest){
  if(!await isAdmin()) return NextResponse.json({error:"unauthorized"},{status:401});
