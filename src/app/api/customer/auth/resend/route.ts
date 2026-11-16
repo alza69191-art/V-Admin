@@ -8,6 +8,7 @@ export async function POST(req:NextRequest){
  try{
   await initDb();
   const body=await req.json().catch(()=>({}));
+  if(!process.env.TURNSTILE_SECRET_KEY)return NextResponse.json({error:"خدمة الحماية غير مهيأة بعد."},{status:503});
   if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});
   const email=String(body.email||"").trim().toLowerCase();
   const rate=await enforceRateLimit(req,"customer-resend",3,3600,email);
