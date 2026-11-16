@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const { mode } = assertEscrowlyReady();
+    if (!process.env.ESCROWLY_WEBHOOK_SECRET) return NextResponse.json({ error: "ESCROWLY_WEBHOOK_SECRET_NOT_CONFIGURED" }, { status: 503 });
     await initDb();
     const rate=await enforceRateLimit(req,"escrowly-create",5,900,String(customer.id));
     if(!rate.allowed)return NextResponse.json({error:"تم تجاوز عدد المحاولات المسموح. حاول لاحقاً."},{status:429,headers:{"Retry-After":String(rate.retryAfter),"Cache-Control":"no-store"}});
