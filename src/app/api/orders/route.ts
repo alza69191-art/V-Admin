@@ -37,6 +37,7 @@ export async function POST(req:NextRequest){
     if(paymentMethod==="escrowly"){
       try { assertEscrowlyReady(); }
       catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"escrowly_not_configured"},{status:503}); }
+      if(!process.env.ESCROWLY_WEBHOOK_SECRET)return NextResponse.json({error:"ESCROWLY_WEBHOOK_SECRET_NOT_CONFIGURED"},{status:503});
     }
     if(!Array.isArray(body.items)||body.items.length<1||body.items.length>30) return NextResponse.json({error:"invalid_cart"},{status:400});
     const quantities=new Map<number,number>();
