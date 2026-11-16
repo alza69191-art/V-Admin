@@ -3,7 +3,7 @@ for (const key of ["DB_HOST","DB_USER","DB_PASSWORD","DB_NAME"]) if (!process.en
 const g = globalThis as unknown as { mysqlPool?: MySqlPool };
 const mysqlPool = g.mysqlPool ?? mysql.createPool({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||4000),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME,ssl:process.env.DB_SSL==="true"?{minVersion:"TLSv1.2"}:undefined,waitForConnections:true,connectionLimit:5,queueLimit:0,connectTimeout:20000});
 if(process.env.NODE_ENV!=="production") g.mysqlPool=mysqlPool;
-type Result<T>={rows:T[];rowCount:number};
+type Result<T>={rows:T[];rowCount:number;insertId?:number};
 export const pool={async query<T=any>(input:string,values:any[]=[]):Promise<Result<T>>{
  let sql=input.trim();const ordered:any[]=[];
  sql=sql.replace(/\$(\d+)/g,(_m,n)=>{ordered.push(values[Number(n)-1]);return "?"});
@@ -16,7 +16,7 @@ export const pool={async query<T=any>(input:string,values:any[]=[]):Promise<Resu
  if(returning&&ins){const id=(res as mysql.ResultSetHeader).insertId;const [rows]=await mysqlPool.execute(`SELECT * FROM ${ins[1]} WHERE id=? LIMIT 1`,[id]);return {rows:rows as T[],rowCount:(res as mysql.ResultSetHeader).affectedRows||0};}
  if(returning&&upd){const [rows]=await mysqlPool.execute(`SELECT * FROM ${upd[1]} WHERE id=? LIMIT 1`,[values[0]]);return {rows:rows as T[],rowCount:(rows as any[]).length};}
  if(Array.isArray(res))return {rows:res as T[],rowCount:res.length};
- return {rows:[],rowCount:(res as mysql.ResultSetHeader).affectedRows||0};
+ return {rows:[],rowCount:(res as mysql.ResultSetHeader).affectedRows||0,insertId:(res as mysql.ResultSetHeader).insertId};
 }};
 let initPromise:Promise<void>|null=null;
 export async function initDb(){if(initPromise)return initPromise;initPromise=(async()=>{
