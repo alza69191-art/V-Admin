@@ -22,6 +22,7 @@ Required Render environment variables before enabling public registration:
 - `RESEND_API_KEY`: Resend API key (keep server-side only).
 - `RESEND_FROM_EMAIL`: verified sender address/domain configured in Resend.
 - `SESSION_SECRET`: existing session signing secret (at least 32 characters).
+- `TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key (server-side only).
 
 Endpoints:
 - `POST /api/customer/auth` with action `register` or `login`.
