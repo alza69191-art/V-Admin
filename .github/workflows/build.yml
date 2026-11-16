@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feature/freelance-platform-foundation]
+    branches: ["feature/**"]
 jobs:
   build:
     runs-on: ubuntu-latest
