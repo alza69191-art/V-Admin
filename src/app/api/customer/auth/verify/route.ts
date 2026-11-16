@@ -1,12 +1,14 @@
 import {NextRequest,NextResponse} from "next/server";
 import {createHash} from "crypto";
 import {pool,initDb} from "@/lib/db";
+import {verifyTurnstile} from "@/lib/turnstile";
 import {issueCustomerSession} from "@/lib/customer-auth";
 export const dynamic="force-dynamic";
 export async function POST(req:NextRequest){
  try{
   await initDb();
   const body=await req.json().catch(()=>({}));
+  if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});
   const email=String(body.email||"").trim().toLowerCase();
   const code=String(body.code||"").trim();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code))return NextResponse.json({error:"أدخل البريد ورمز التأكيد المكوّن من 6 أرقام."},{status:400});
