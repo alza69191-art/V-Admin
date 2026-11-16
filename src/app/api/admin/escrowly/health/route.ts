@@ -21,7 +21,7 @@ export async function GET(){
     });
     const data=await response.json().catch(()=>null);
     if(!response.ok) return NextResponse.json({ok:false,mode,providerStatus:response.status,error:"ESCROWLY_AUTH_OR_API_ERROR",message:typeof data?.message==="string"?data.message:"Escrowly rejected the API request."},{status:502});
-    return NextResponse.json({ok:true,provider:"Escrowly Connect",mode,authentication:"valid",readOnly:true,transactionsFound:Number(data?.total??data?.data?.length??0)},{headers:{"Cache-Control":"no-store"}});
+    return NextResponse.json({ok:true,provider:"Escrowly Connect",mode,authentication:"valid",webhookConfigured:Boolean(process.env.ESCROWLY_WEBHOOK_SECRET),readOnly:true,transactionsFound:Number(data?.total??data?.data?.length??0)},{headers:{"Cache-Control":"no-store"}});
   }catch(error){
     return NextResponse.json({ok:false,mode,error:error instanceof Error?error.message:"ESCROWLY_UNREACHABLE"},{status:502});
   }
