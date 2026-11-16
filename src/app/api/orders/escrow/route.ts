@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
     const priceMinor = Math.round(Number(order.total) * 100);
 
     const inserted = await pool.query(
-      "INSERT IGNORE INTO v_order_escrows(order_id,order_ref,status,price_minor,currency,mode) VALUES($1,$2,'creating',$3,$4,$5)",
-      [Number(order.id), "vcommerce_" + orderNumber.toLowerCase(), priceMinor, stableCurrency, mode]
+      "INSERT IGNORE INTO v_order_escrows(order_id,order_ref,status,price_minor,currency,mode,amount) VALUES($1,$2,'creating',$3,$4,$5,$6)",
+      [Number(order.id), "vcommerce_" + orderNumber.toLowerCase(), priceMinor, stableCurrency, mode, amountText]
     );
     const savedResult = await pool.query<any>(
       "SELECT order_ref,price_minor,transaction_id,checkout_url,status,currency,mode,session_id FROM v_order_escrows WHERE order_id=$1 LIMIT 1",
@@ -90,8 +90,8 @@ export async function POST(req: NextRequest) {
     });
 
     await pool.query(
-      "UPDATE v_order_escrows SET transaction_id=$1,session_id=NULL,checkout_url=$2,status=$3,currency=$4,mode=$5 WHERE order_id=$6 AND transaction_id IS NULL",
-      [transaction.id, transaction.checkout_url, String(transaction.status || "awaiting_payment"), stableCurrency, mode, Number(order.id)]
+      "UPDATE v_order_escrows SET transaction_id=$1,session_id=NULL,checkout_url=$2,status=$3,currency=$4,mode=$5,amount=$6 WHERE order_id=$7 AND transaction_id IS NULL",
+      [transaction.id, transaction.checkout_url, String(transaction.status || "awaiting_payment"), stableCurrency, mode, amountText, Number(order.id)]
     );
     return NextResponse.json({
       ok: true,
