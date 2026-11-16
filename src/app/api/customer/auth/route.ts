@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import bcrypt from "bcryptjs";
 import {createHash,randomInt} from "crypto";
 import {pool,initDb} from "@/lib/db";
+import {verifyTurnstile} from "@/lib/turnstile";
 import {issueCustomerSession,currentCustomer} from "@/lib/customer-auth";
 
 export const dynamic="force-dynamic";
@@ -25,6 +26,7 @@ export async function POST(req:NextRequest){
   await initDb();
   const body=await req.json().catch(()=>({}));
   const action=String(body.action||"");
+  if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});
   const normalized=String(body.email||"").trim().toLowerCase();
   const password=String(body.password||"");
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)||password.length<10||password.length>128)
