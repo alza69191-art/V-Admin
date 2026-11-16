@@ -43,9 +43,9 @@ export async function POST(req: NextRequest) {
     if (!["USDT", "USDC", "DAI"].includes(stableCurrency)) {
       return NextResponse.json({ error: "escrowly_currency_invalid" }, { status: 503 });
     }
-    const rate = Number(process.env.ESCROWLY_USD_RATE || "1");
-    const amount = Number(order.total) * rate;
-    if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(amount) || amount <= 0) {
+    const usdRate = Number(process.env.ESCROWLY_USD_RATE || "1");
+    const amount = Number(order.total) * usdRate;
+    if (!Number.isFinite(usdRate) || usdRate <= 0 || !Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: "escrowly_amount_configuration_invalid" }, { status: 503 });
     }
     const amountText = amount.toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
