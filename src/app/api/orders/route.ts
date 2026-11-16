@@ -5,6 +5,21 @@ import {currentCustomer} from "@/lib/customer-auth";
 
 export const dynamic="force-dynamic";
 
+export async function GET(){
+  const customer=await currentCustomer();
+  if(!customer)return NextResponse.json({error:"login_required"},{status:401});
+  try{
+    await initDb();
+    const orders=await pool.query("SELECT id,order_number,status,currency,total,created_at FROM v_orders WHERE customer_id=$1 ORDER BY created_at DESC LIMIT 50",[customer.id]);
+    if(!orders.rows.length)return NextResponse.json([]);
+    const ids=orders.rows.map((x:any)=>Number(x.id));
+    const items=await pool.query(`SELECT id,order_id,title_snapshot,unit_price,quantity,line_total,currency FROM v_order_items WHERE order_id IN (${ids.map((_,i)=>"$"+(i+1)).join(",")}) ORDER BY id ASC`,ids);
+    const grouped=new Map<number,any[]>();
+    for(const item of items.rows){const id=Number(item.order_id);if(!grouped.has(id))grouped.set(id,[]);grouped.get(id)!.push(item);}
+    return NextResponse.json(orders.rows.map((o:any)=>({...o,items:grouped.get(Number(o.id))||[]})));
+  }catch{return NextResponse.json({error:"تعذر تحميل الطلبات"},{status:503});}
+}
+
 export async function POST(req:NextRequest){
   const origin=req.headers.get("origin");
   if(process.env.NODE_ENV==="production" && origin!=="https://v-storefront.onrender.com") return NextResponse.json({error:"origin_not_allowed"},{status:403});
