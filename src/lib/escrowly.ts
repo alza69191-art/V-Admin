@@ -9,6 +9,7 @@ export async function ensureEscrowlySchema() {
     schemaReady = (async () => {
       await pool.query("ALTER TABLE v_order_escrows ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(100) NULL");
       await pool.query("ALTER TABLE v_order_escrows ADD COLUMN IF NOT EXISTS currency VARCHAR(8) NULL");
+      await pool.query("ALTER TABLE v_order_escrows ADD COLUMN IF NOT EXISTS amount DECIMAL(20,8) NULL");
       await pool.query("ALTER TABLE v_order_escrows ADD COLUMN IF NOT EXISTS mode VARCHAR(8) NULL");
       await pool.query("CREATE TABLE IF NOT EXISTS v_escrowly_webhook_events (event_id VARCHAR(120) NOT NULL PRIMARY KEY, transaction_id VARCHAR(100) NOT NULL, event_type VARCHAR(80) NOT NULL, mode VARCHAR(8) NOT NULL, received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_escrowly_event_tx(transaction_id))");
     })().catch((error) => { schemaReady = null; throw error; });
