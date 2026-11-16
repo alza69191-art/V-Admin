@@ -1,11 +1,13 @@
 import {NextRequest,NextResponse} from "next/server";
 import {createHash,randomInt} from "crypto";
 import {pool,initDb} from "@/lib/db";
+import {verifyTurnstile} from "@/lib/turnstile";
 export const dynamic="force-dynamic";
 export async function POST(req:NextRequest){
  try{
   await initDb();
   const body=await req.json().catch(()=>({}));
+  if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});
   const email=String(body.email||"").trim().toLowerCase();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return NextResponse.json({error:"أدخل بريداً صحيحاً."},{status:400});
   const found=await pool.query("SELECT id,name,email,email_verified_at FROM v_customers WHERE email=$1 LIMIT 1",[email]);
