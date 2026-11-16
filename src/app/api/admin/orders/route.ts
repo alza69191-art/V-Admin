@@ -28,8 +28,8 @@ export async function PATCH(req:NextRequest){
    if(!transitions[String(order.status)]?.includes(next))throw new Error("INVALID_TRANSITION");
    const [escrowRows]=await connection.execute<any[]>("SELECT status FROM v_order_escrows WHERE order_id=? LIMIT 1",[id]);
    const escrowStatus=String(escrowRows[0]?.status||"");
-   if(["confirmed","processing","shipped"].includes(next)&&escrowRows.length&&escrowStatus!=="escrow_funded")throw new Error("ESCROW_NOT_FUNDED");
-   if(next==="cancelled"&&["escrow_funded","escrow_disputed","escrow_pending"].includes(escrowStatus))throw new Error("ESCROW_REQUIRES_RESOLUTION");
+   if(["confirmed","processing","shipped"].includes(next)&&escrowRows.length&&escrowStatus!=="funded")throw new Error("ESCROW_NOT_FUNDED");
+   if(next==="cancelled"&&["funded","disputed","inspection_expiring"].includes(escrowStatus))throw new Error("ESCROW_REQUIRES_RESOLUTION");
    if(next==="cancelled"&&Number(order.stock_reserved)===1){
     const [lines]=await connection.execute<any[]>("SELECT product_id,quantity FROM v_order_items WHERE order_id=?",[id]);
     for(const line of lines)await connection.execute("UPDATE v_products SET stock=stock+?,updated_at=NOW() WHERE id=?",[line.quantity,line.product_id]);
@@ -41,6 +41,6 @@ export async function PATCH(req:NextRequest){
   return NextResponse.json({ok:true,order:result});
  }catch(error){
   const code=error instanceof Error?error.message:"";
-  return NextResponse.json({error:code==="NOT_FOUND"?"الطلب غير موجود.":code==="INVALID_TRANSITION"?"انتقال الحالة غير مسموح.":code==="ESCROW_NOT_FUNDED"?"لا يمكن تنفيذ الطلب قبل تأكيد حجز الأموال في الضمان.":code==="ESCROW_REQUIRES_RESOLUTION"?"الأموال محجوزة أو يوجد نزاع. يجب حل الضمان عبر Vaultion قبل إلغاء الطلب.":"تعذر تحديث الطلب."},{status:["NOT_FOUND","INVALID_TRANSITION","ESCROW_NOT_FUNDED","ESCROW_REQUIRES_RESOLUTION"].includes(code)?409:500});
+  return NextResponse.json({error:code==="NOT_FOUND"?"الطلب غير موجود.":code==="INVALID_TRANSITION"?"انتقال الحالة غير مسموح.":code==="ESCROW_NOT_FUNDED"?"لا يمكن تنفيذ الطلب قبل تأكيد حجز الأموال في الضمان.":code==="ESCROW_REQUIRES_RESOLUTION"?"الأموال محجوزة أو يوجد نزاع. يجب حل الضمان عبر Escrowly قبل إلغاء الطلب.":"تعذر تحديث الطلب."},{status:["NOT_FOUND","INVALID_TRANSITION","ESCROW_NOT_FUNDED","ESCROW_REQUIRES_RESOLUTION"].includes(code)?409:500});
  }
 }
