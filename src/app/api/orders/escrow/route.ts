@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentCustomer } from "@/lib/customer-auth";
 import { initDb, pool } from "@/lib/db";
 import { assertEscrowlyReady, createEscrowlyTransaction, ensureEscrowlySchema } from "@/lib/escrowly";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 const STOREFRONT = "https://v-storefront.onrender.com";
