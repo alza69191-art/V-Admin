@@ -1,3 +1,3 @@
-import { NextResponse } from "next/server"; import { pool } from "@/lib/db";
+import {NextResponse} from "next/server";import {pool,initDb} from "@/lib/db";
 export const dynamic="force-dynamic";
-export async function GET(){try{const r=await pool.query("SELECT key,value FROM v_settings");return NextResponse.json(Object.fromEntries(r.rows.map(x=>[x.key,x.value])) ,{headers:{"Cache-Control":"no-store"}});}catch{return NextResponse.json({error:"database_unavailable"},{status:503});}}
+export async function GET(){try{await initDb();const r=await pool.query("SELECT `key`,value FROM v_settings");return NextResponse.json(Object.fromEntries(r.rows.map((x:any)=>[x.key,typeof x.value==="string"?JSON.parse(x.value):x.value])),{headers:{"Cache-Control":"no-store"}});}catch{return NextResponse.json({error:"database_unavailable"},{status:503});}}

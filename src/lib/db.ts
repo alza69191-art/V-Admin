@@ -1,14 +1,31 @@
-import { Pool } from "pg";
-const globalForPg = globalThis as unknown as { pool?: Pool };
-export const pool = globalForPg.pool ?? new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL?.includes("render.com") ? { rejectUnauthorized:false } : undefined, max: 5 });
-if (process.env.NODE_ENV !== "production") globalForPg.pool = pool;
-export async function initDb(){
- await pool.query(`CREATE TABLE IF NOT EXISTS v_settings (key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz DEFAULT now());
- CREATE TABLE IF NOT EXISTS v_products (id bigserial PRIMARY KEY, title text NOT NULL, description text DEFAULT '', price numeric(12,2) NOT NULL DEFAULT 0, currency text NOT NULL DEFAULT 'USD', image_url text DEFAULT '', category text DEFAULT 'عام', stock integer NOT NULL DEFAULT 0, status text NOT NULL DEFAULT 'published', created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
- CREATE TABLE IF NOT EXISTS v_submissions (id bigserial PRIMARY KEY, payload jsonb NOT NULL, status text NOT NULL DEFAULT 'pending', created_at timestamptz DEFAULT now());
- CREATE TABLE IF NOT EXISTS v_audit (id bigserial PRIMARY KEY, actor text NOT NULL, action text NOT NULL, entity text, entity_id text, created_at timestamptz DEFAULT now());`);
- const defaults:any={storeName:"V Store",logoText:"V",primary:"#5424d8",secondary:"#1767e8",background:"#f7f8fc",surface:"#ffffff",text:"#15182b",announcement:"اكتشف تشكيلتنا الجديدة",allowCustomerSubmissions:false,currency:"USD",language:"ar",maintenance:false,heroTitle:"اكتشف ما يناسبك",heroSubtitle:"تسوّق تجربة مختلفة",heroImage:"",supportEmail:"support@example.com",whatsapp:"",instagram:"",footerText:"© V Store"};
- for(const [key,value] of Object.entries(defaults)) await pool.query("INSERT INTO v_settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO NOTHING",[key,JSON.stringify(value)]);
- const count=await pool.query("SELECT count(*)::int n FROM v_products");
- if(!count.rows[0].n) await pool.query("INSERT INTO v_products(title,description,price,currency,image_url,category,stock) VALUES ($1,$2,$3,$4,$5,$6,$7),($8,$9,$10,$11,$12,$13,$14),($15,$16,$17,$18,$19,$20,$21)",["سماعات لاسلكية","صوت نقي وتصميم أنيق",59.9,"USD","", "إلكترونيات",24,"ساعة عصرية","أناقة لكل يوم",89,"USD","","إكسسوارات",12,"حقيبة يومية","تصميم عملي وخامات ممتازة",42,"USD","","أزياء",18]);
-}
+import mysql, { Pool as MySqlPool } from "mysql2/promise";
+for (const key of ["DB_HOST","DB_USER","DB_PASSWORD","DB_NAME"]) if (!process.env[key]) throw new Error(`Missing required environment variable: ${key}`);
+const g = globalThis as unknown as { mysqlPool?: MySqlPool };
+const mysqlPool = g.mysqlPool ?? mysql.createPool({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||4000),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME,ssl:process.env.DB_SSL==="true"?{minVersion:"TLSv1.2"}:undefined,waitForConnections:true,connectionLimit:5,queueLimit:0,connectTimeout:20000});
+if(process.env.NODE_ENV!=="production") g.mysqlPool=mysqlPool;
+type Result<T>={rows:T[];rowCount:number};
+export const pool={async query<T=any>(input:string,values:any[]=[]):Promise<Result<T>>{
+ let sql=input.trim();const ordered:any[]=[];
+ sql=sql.replace(/\$(\d+)/g,(_m,n)=>{ordered.push(values[Number(n)-1]);return "?"});
+ if(/ON CONFLICT\s*\(\s*key\s*\)\s*DO UPDATE/i.test(sql)) sql=sql.replace(/ON CONFLICT\s*\(\s*key\s*\)\s*DO UPDATE SET value\s*=\s*EXCLUDED\.value\s*,\s*updated_at\s*=\s*now\(\)/i,"ON DUPLICATE KEY UPDATE value=VALUES(value), updated_at=NOW()");
+ else if(/ON CONFLICT\s*\(\s*key\s*\)\s*DO NOTHING/i.test(sql)) sql=sql.replace(/^INSERT\s+INTO/i,"INSERT IGNORE INTO").replace(/ON CONFLICT\s*\(\s*key\s*\)\s*DO NOTHING/i,"");
+ sql=sql.replace(/count\(\*\)::int\s+n/i,"COUNT(*) AS n").replace(/AS\s+"imageUrl"/g,"AS imageUrl");
+ const returning=/\s+RETURNING\s+\*\s*;?$/i.test(sql);sql=sql.replace(/\s+RETURNING\s+\*\s*;?$/i,"");
+ const ins=/^INSERT\s+INTO\s+(\w+)/i.exec(sql),upd=/^UPDATE\s+(\w+)/i.exec(sql);
+ const [res]=await mysqlPool.execute(sql,ordered.length?ordered:values);
+ if(returning&&ins){const id=(res as mysql.ResultSetHeader).insertId;const [rows]=await mysqlPool.execute(`SELECT * FROM ${ins[1]} WHERE id=? LIMIT 1`,[id]);return {rows:rows as T[],rowCount:(res as mysql.ResultSetHeader).affectedRows||0};}
+ if(returning&&upd){const [rows]=await mysqlPool.execute(`SELECT * FROM ${upd[1]} WHERE id=? LIMIT 1`,[values[0]]);return {rows:rows as T[],rowCount:(rows as any[]).length};}
+ if(Array.isArray(res))return {rows:res as T[],rowCount:res.length};
+ return {rows:[],rowCount:(res as mysql.ResultSetHeader).affectedRows||0};
+}};
+let initPromise:Promise<void>|null=null;
+export async function initDb(){if(initPromise)return initPromise;initPromise=(async()=>{
+ await pool.query(`CREATE TABLE IF NOT EXISTS v_settings (`key` VARCHAR(191) NOT NULL PRIMARY KEY,value JSON NOT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`);
+ await pool.query(`CREATE TABLE IF NOT EXISTS v_products (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,title VARCHAR(180) NOT NULL,description TEXT,price DECIMAL(12,2) NOT NULL DEFAULT 0,currency VARCHAR(8) NOT NULL DEFAULT 'USD',image_url TEXT,category VARCHAR(100) DEFAULT 'عام',stock INT NOT NULL DEFAULT 0,status VARCHAR(20) NOT NULL DEFAULT 'published',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_products_created(created_at),INDEX idx_products_status(status))`);
+ await pool.query(`CREATE TABLE IF NOT EXISTS v_submissions (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,payload JSON NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'pending',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_submissions_created(created_at))`);
+ await pool.query(`CREATE TABLE IF NOT EXISTS v_audit (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,actor VARCHAR(100) NOT NULL,action VARCHAR(180) NOT NULL,entity VARCHAR(100),entity_id VARCHAR(100),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+ const d:Record<string,any>={storeName:"V Store",logoText:"V",primary:"#5424d8",secondary:"#1767e8",background:"#f7f8fc",surface:"#ffffff",text:"#15182b",announcement:"اكتشف تشكيلتنا الجديدة",allowCustomerSubmissions:false,currency:"USD",language:"ar",maintenance:false,heroTitle:"اكتشف ما يناسبك",heroSubtitle:"تسوّق تجربة مختلفة",heroImage:"",supportEmail:"support@example.com",whatsapp:"",instagram:"",footerText:"© V Store"};
+ for(const [k,v] of Object.entries(d))await pool.query("INSERT INTO v_settings(`key`,value) VALUES($1,$2) ON CONFLICT(key) DO NOTHING",[k,JSON.stringify(v)]);
+ const c=await pool.query<{n:number|string}>("SELECT count(*)::int n FROM v_products");
+ if(Number(c.rows[0]?.n||0)===0)await pool.query("INSERT INTO v_products(title,description,price,currency,image_url,category,stock) VALUES($1,$2,$3,$4,$5,$6,$7),($8,$9,$10,$11,$12,$13,$14),($15,$16,$17,$18,$19,$20,$21)",["سماعات لاسلكية","صوت نقي وتصميم أنيق",59.9,"USD","","إلكترونيات",24,"ساعة عصرية","أناقة لكل يوم",89,"USD","","إكسسوارات",12,"حقيبة يومية","تصميم عملي وخامات ممتازة",42,"USD","","أزياء",18]);
+})().catch(e=>{initPromise=null;throw e});return initPromise;}

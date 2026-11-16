@@ -1,3 +1,3 @@
-import { NextResponse } from "next/server"; import { pool } from "@/lib/db";
+import {NextResponse} from "next/server";import {pool,initDb} from "@/lib/db";
 export const dynamic="force-dynamic";
-export async function GET(){try{const r=await pool.query("SELECT id,title,description,price,currency,image_url AS \"imageUrl\",category,stock FROM v_products WHERE status='published' AND stock>=0 ORDER BY created_at DESC LIMIT 100");return NextResponse.json(r.rows,{headers:{"Cache-Control":"no-store"}});}catch{return NextResponse.json({error:"database_unavailable"},{status:503});}}
+export async function GET(){try{await initDb();const r=await pool.query("SELECT id,title,description,price,currency,image_url AS imageUrl,category,stock FROM v_products WHERE status='published' AND stock>=0 ORDER BY created_at DESC LIMIT 100");return NextResponse.json(r.rows,{headers:{"Cache-Control":"no-store"}});}catch{return NextResponse.json({error:"database_unavailable"},{status:503});}}
