@@ -4,7 +4,8 @@ const g = globalThis as unknown as { mysqlPool?: MySqlPool };
 const mysqlPool = g.mysqlPool ?? mysql.createPool({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||4000),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME,ssl:process.env.DB_SSL==="true"?{minVersion:"TLSv1.2"}:undefined,waitForConnections:true,connectionLimit:5,queueLimit:0,connectTimeout:20000});
 if(process.env.NODE_ENV!=="production") g.mysqlPool=mysqlPool;
 type Result<T>={rows:T[];rowCount:number;insertId?:number};
-export async function withTransaction<T>(work:(connection:PoolConnection)=>Promise<T>):Promise<T>{const connection=await mysqlPool.getConnection();try{await connection.beginTransaction();const result=await work(connection);await connection.commit();return result;}catch(error){await connection.rollback();throw error;}finally{connection.release();}}\nexport const pool={async query<T=any>(input:string,values:any[]=[]):Promise<Result<T>>{
+export async function withTransaction<T>(work:(connection:PoolConnection)=>Promise<T>):Promise<T>{const connection=await mysqlPool.getConnection();try{await connection.beginTransaction();const result=await work(connection);await connection.commit();return result;}catch(error){await connection.rollback();throw error;}finally{connection.release();}}
+export const pool={async query<T=any>(input:string,values:any[]=[]):Promise<Result<T>>{
  let sql=input.trim();const ordered:any[]=[];
  sql=sql.replace(/\$(\d+)/g,(_m,n)=>{ordered.push(values[Number(n)-1]);return "?"});
  if(/ON CONFLICT\s*\(\s*key\s*\)\s*DO UPDATE/i.test(sql)) sql=sql.replace(/ON CONFLICT\s*\(\s*key\s*\)\s*DO UPDATE SET value\s*=\s*EXCLUDED\.value\s*,\s*updated_at\s*=\s*now\(\)/i,"ON DUPLICATE KEY UPDATE value=VALUES(value), updated_at=NOW()");
