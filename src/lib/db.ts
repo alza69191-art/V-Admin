@@ -31,7 +31,9 @@ export async function initDb(){if(initPromise)return initPromise;initPromise=(as
  await pool.query(`ALTER TABLE v_customers ADD COLUMN IF NOT EXISTS username VARCHAR(40) NULL`);
  await pool.query(`ALTER TABLE v_customers ADD COLUMN IF NOT EXISTS bio TEXT NULL`);
  await pool.query(`ALTER TABLE v_customers ADD COLUMN IF NOT EXISTS skills JSON NULL`);
- await pool.query(`UPDATE v_customers SET email_verified_at=created_at WHERE email_verified_at IS NULL`);
+ await pool.query(`CREATE TABLE IF NOT EXISTS v_schema_migrations (version VARCHAR(100) NOT NULL PRIMARY KEY,applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+ const legacyVerificationMigration=await pool.query(`INSERT IGNORE INTO v_schema_migrations(version) VALUES('legacy-customers-email-verified-once')`);
+ if(legacyVerificationMigration.rowCount>0) await pool.query(`UPDATE v_customers SET email_verified_at=created_at WHERE email_verified_at IS NULL`);
  await pool.query(`CREATE TABLE IF NOT EXISTS v_customer_verifications (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,customer_id BIGINT UNSIGNED NOT NULL,code_hash CHAR(64) NOT NULL,expires_at DATETIME NOT NULL,consumed_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_customer_verification(customer_id,created_at))`);
  await pool.query(`CREATE TABLE IF NOT EXISTS v_freelancer_portfolio (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,customer_id BIGINT UNSIGNED NOT NULL,title VARCHAR(180) NOT NULL,description TEXT NULL,project_url VARCHAR(512) NULL,cover_url VARCHAR(512) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_portfolio_customer(customer_id))`);
 
