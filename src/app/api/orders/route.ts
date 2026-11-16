@@ -28,6 +28,13 @@ export async function POST(req:NextRequest){
   try{
     await initDb();
     const body=await req.json();
+    const paymentMethod=String(body.paymentMethod||"manual");
+    if(paymentMethod!=="manual"&&paymentMethod!=="vaultion") return NextResponse.json({error:"invalid_payment_method"},{status:400});
+    if(paymentMethod==="vaultion"){
+      const setting=await pool.query<any>("SELECT value FROM v_settings WHERE `key`=$1 LIMIT 1",["vaultionTronWallet"]);
+      const raw=setting.rows[0]?.value, wallet=typeof raw==="string"?JSON.parse(raw):raw;
+      if(typeof wallet!=="string"||!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(wallet)) return NextResponse.json({error:"vaultion_wallet_not_configured"},{status:503});
+    }
     if(!Array.isArray(body.items)||body.items.length<1||body.items.length>30) return NextResponse.json({error:"invalid_cart"},{status:400});
     const quantities=new Map<number,number>();
     for(const item of body.items){
@@ -55,6 +62,8 @@ export async function POST(req:NextRequest){
         totalCents+=unitCents*qty;
         lines.push({product,qty,unitCents});
       }
+      if(paymentMethod==="vaultion"&&currency!=="USD") throw new Error("VAULTION_USD_ONLY");
+      if(paymentMethod==="vaultion"&&totalCents<5000) throw new Error("VAULTION_MINIMUM");
       const orderNumber="VC-"+Date.now().toString(36).toUpperCase()+"-"+randomBytes(3).toString("hex").toUpperCase();
       const [insertResult]=await connection.execute<any>("INSERT INTO v_orders(order_number,customer_id,customer_name,customer_email,status,currency,total,stock_reserved) VALUES(?,?,?,?,'pending',?,?,1)",[orderNumber,customer.id,user.rows[0].name,user.rows[0].email,currency,totalCents/100]);
       const orderId=Number(insertResult.insertId);
@@ -65,11 +74,11 @@ export async function POST(req:NextRequest){
       await connection.execute("INSERT INTO v_order_events(order_id,actor,from_status,to_status,note) VALUES(?,'customer',NULL,'pending','تم إنشاء الطلب بانتظار مراجعة المتجر')",[orderId]);
       return {id:orderId,orderNumber,total:totalCents/100,currency};
     });
-    return NextResponse.json({ok:true,order,paymentStatus:"unpaid",message:"تم استلام طلبك وهو بانتظار تأكيد المتجر. لم يتم تحصيل أي مبلغ."},{status:201});
+    return NextResponse.json({ok:true,order,paymentMethod,paymentStatus:"unpaid",message:paymentMethod==="vaultion"?"تم إنشاء الطلب؛ تابع إلى صفحة الضمان لإيداع المبلغ.":"تم استلام طلبك وهو بانتظار تأكيد المتجر. لم يتم تحصيل أي مبلغ."},{status:201});
   }catch(error){
     const code=error instanceof Error?error.message:"";
-    const messages:Record<string,string>={PRODUCT_NOT_FOUND:"أحد المنتجات لم يعد متاحاً.",PRODUCT_UNAVAILABLE:"أحد المنتجات غير منشور حالياً.",MIXED_CURRENCY:"لا يمكن جمع منتجات بعملات مختلفة في طلب واحد.",INSUFFICIENT_STOCK:"الكمية المطلوبة غير متوفرة في المخزون.",INVALID_PRICE:"تعذر اعتماد سعر أحد المنتجات."};
-    const status=code==="INSUFFICIENT_STOCK"?409:code==="PRODUCT_NOT_FOUND"||code==="PRODUCT_UNAVAILABLE"?409:code==="MIXED_CURRENCY"||code==="INVALID_PRICE"?400:500;
+    const messages:Record<string,string>={VAULTION_USD_ONLY:"الضمان متاح حالياً للطلبات بالدولار الأمريكي فقط.",VAULTION_MINIMUM:"الحد الأدنى للضمان 50 دولاراً.",PRODUCT_NOT_FOUND:"أحد المنتجات لم يعد متاحاً.",PRODUCT_UNAVAILABLE:"أحد المنتجات غير منشور حالياً.",MIXED_CURRENCY:"لا يمكن جمع منتجات بعملات مختلفة في طلب واحد.",INSUFFICIENT_STOCK:"الكمية المطلوبة غير متوفرة في المخزون.",INVALID_PRICE:"تعذر اعتماد سعر أحد المنتجات."};
+    const status=code==="INSUFFICIENT_STOCK"?409:code==="PRODUCT_NOT_FOUND"||code==="PRODUCT_UNAVAILABLE"?409:code==="MIXED_CURRENCY"||code==="INVALID_PRICE"||code==="VAULTION_USD_ONLY"||code==="VAULTION_MINIMUM"?400:500;
     return NextResponse.json({error:messages[code]||"تعذر إنشاء الطلب. حاول مرة أخرى."},{status});
   }
 }
