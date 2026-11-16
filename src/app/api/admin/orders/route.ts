@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {pool,initDb,withTransaction} from "@/lib/db";
 import {isAdmin} from "@/lib/auth";
 export const dynamic="force-dynamic";
-const transitions:Record<string,string[]>={pending:["confirmed","cancelled"],confirmed:["processing","cancelled"],processing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
+const transitions:Record<string,string[]>={pending:["confirmed","cancelled"],paid:["confirmed","cancelled"],confirmed:["processing","cancelled"],processing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
 export async function GET(){
  if(!await isAdmin()) return NextResponse.json({error:"unauthorized"},{status:401});
  await initDb();
