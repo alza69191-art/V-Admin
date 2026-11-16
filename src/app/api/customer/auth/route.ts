@@ -27,7 +27,8 @@ export async function POST(req:NextRequest){
   await initDb();
   const body=await req.json().catch(()=>({}));
   const action=String(body.action||"");
-  if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});
+  if(process.env.TURNSTILE_SECRET_KEY){if(!await verifyTurnstile(String(body.turnstileToken||"")))return NextResponse.json({error:"أكمل اختبار الحماية ثم أعد المحاولة."},{status:403});}
+  else if(action!=="login")return NextResponse.json({error:"التسجيل والتحقق متوقفان مؤقتاً حتى تفعيل Cloudflare Turnstile."},{status:503});
   const normalized=String(body.email||"").trim().toLowerCase();
   const rate=await enforceRateLimit(req,"customer-auth",12,900,normalized);
   if(!rate.allowed)return NextResponse.json({error:"تم تجاوز عدد المحاولات المسموح. حاول لاحقاً."},{status:429,headers:{"Retry-After":String(rate.retryAfter),"Cache-Control":"no-store"}});
