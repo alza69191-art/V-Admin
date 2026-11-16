@@ -1,0 +1,2 @@
+import {NextResponse} from "next/server";import {isAdmin} from "@/lib/auth";import {pool,initDb} from "@/lib/db";
+export async function GET(){if(!await isAdmin())return NextResponse.json({error:"unauthorized"},{status:401});await initDb();const r=await pool.query("SELECT c.id,c.name,c.email,c.created_at,c.last_login,COUNT(t.id) AS tickets FROM v_customers c LEFT JOIN v_support_tickets t ON t.customer_id=c.id GROUP BY c.id,c.name,c.email,c.created_at,c.last_login ORDER BY c.created_at DESC LIMIT 500");return NextResponse.json(r.rows);}
