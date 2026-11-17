@@ -34,12 +34,14 @@ export async function PATCH(req: NextRequest) {
 
     if (type === "project") {
       if (!["open", "paused", "cancelled"].includes(status)) return NextResponse.json({ error: "حالة المشروع غير صالحة." }, { status: 400 });
-      const result = await pool.query("UPDATE v_projects SET status=$1,visibility=$2 WHERE id=$3", [status, status === "open" ? "public" : "private", id]);
-      if (!result.rowCount) return NextResponse.json({ error: "المشروع غير موجود." }, { status: 404 });
+      const exists = await pool.query("SELECT id FROM v_projects WHERE id=$1 LIMIT 1", [id]);
+      if (!exists.rows.length) return NextResponse.json({ error: "المشروع غير موجود." }, { status: 404 });
+      await pool.query("UPDATE v_projects SET status=$1,visibility=$2 WHERE id=$3", [status, status === "open" ? "public" : "private", id]);
     } else if (type === "service") {
       if (!["active", "pending", "paused", "rejected"].includes(status)) return NextResponse.json({ error: "حالة الخدمة غير صالحة." }, { status: 400 });
-      const result = await pool.query("UPDATE v_freelancer_services SET status=$1 WHERE id=$2", [status, id]);
-      if (!result.rowCount) return NextResponse.json({ error: "الخدمة غير موجودة." }, { status: 404 });
+      const exists = await pool.query("SELECT id FROM v_freelancer_services WHERE id=$1 LIMIT 1", [id]);
+      if (!exists.rows.length) return NextResponse.json({ error: "الخدمة غير موجودة." }, { status: 404 });
+      await pool.query("UPDATE v_freelancer_services SET status=$1 WHERE id=$2", [status, id]);
     } else {
       return NextResponse.json({ error: "نوع العنصر غير صالح." }, { status: 400 });
     }
