@@ -2,6 +2,8 @@ import {NextRequest,NextResponse} from "next/server";
 import {randomBytes} from "node:crypto";
 import {pool,initDb,withTransaction} from "@/lib/db";
 import {currentCustomer} from "@/lib/customer-auth";
+import {enforceRateLimit} from "@/lib/rate-limit";
+import {assertEscrowlyReady} from "@/lib/escrowly";
 
 export const dynamic="force-dynamic";
 
@@ -27,13 +29,15 @@ export async function POST(req:NextRequest){
   if(!customer) return NextResponse.json({error:"login_required"},{status:401});
   try{
     await initDb();
+    const rate=await enforceRateLimit(req,"orders-create",10,900,String(customer.id));
+    if(!rate.allowed)return NextResponse.json({error:"تم تجاوز عدد المحاولات المسموح. حاول لاحقاً."},{status:429,headers:{"Retry-After":String(rate.retryAfter),"Cache-Control":"no-store"}});
     const body=await req.json();
     const paymentMethod=String(body.paymentMethod||"manual");
-    if(paymentMethod!=="manual"&&paymentMethod!=="vaultion") return NextResponse.json({error:"invalid_payment_method"},{status:400});
-    if(paymentMethod==="vaultion"){
-      const setting=await pool.query<any>("SELECT value FROM v_settings WHERE `key`=$1 LIMIT 1",["vaultionTronWallet"]);
-      const raw=setting.rows[0]?.value, wallet=typeof raw==="string"?JSON.parse(raw):raw;
-      if(typeof wallet!=="string"||!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(wallet)) return NextResponse.json({error:"vaultion_wallet_not_configured"},{status:503});
+    if(paymentMethod!=="manual"&&paymentMethod!=="escrowly") return NextResponse.json({error:"invalid_payment_method"},{status:400});
+    if(paymentMethod==="escrowly"){
+      try { assertEscrowlyReady(); }
+      catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"escrowly_not_configured"},{status:503}); }
+      if(!process.env.ESCROWLY_WEBHOOK_SECRET)return NextResponse.json({error:"ESCROWLY_WEBHOOK_SECRET_NOT_CONFIGURED"},{status:503});
     }
     if(!Array.isArray(body.items)||body.items.length<1||body.items.length>30) return NextResponse.json({error:"invalid_cart"},{status:400});
     const quantities=new Map<number,number>();
@@ -62,8 +66,8 @@ export async function POST(req:NextRequest){
         totalCents+=unitCents*qty;
         lines.push({product,qty,unitCents});
       }
-      if(paymentMethod==="vaultion"&&currency!=="USD") throw new Error("VAULTION_USD_ONLY");
-      if(paymentMethod==="vaultion"&&totalCents<5000) throw new Error("VAULTION_MINIMUM");
+      if(paymentMethod==="escrowly"&&currency!=="USD") throw new Error("ESCROWLY_USD_ONLY");
+      
       const orderNumber="VC-"+Date.now().toString(36).toUpperCase()+"-"+randomBytes(3).toString("hex").toUpperCase();
       const [insertResult]=await connection.execute<any>("INSERT INTO v_orders(order_number,customer_id,customer_name,customer_email,status,currency,total,stock_reserved) VALUES(?,?,?,?,'pending',?,?,1)",[orderNumber,customer.id,user.rows[0].name,user.rows[0].email,currency,totalCents/100]);
       const orderId=Number(insertResult.insertId);
@@ -74,11 +78,11 @@ export async function POST(req:NextRequest){
       await connection.execute("INSERT INTO v_order_events(order_id,actor,from_status,to_status,note) VALUES(?,'customer',NULL,'pending','تم إنشاء الطلب بانتظار مراجعة المتجر')",[orderId]);
       return {id:orderId,orderNumber,total:totalCents/100,currency};
     });
-    return NextResponse.json({ok:true,order,paymentMethod,paymentStatus:"unpaid",message:paymentMethod==="vaultion"?"تم إنشاء الطلب؛ تابع إلى صفحة الضمان لإيداع المبلغ.":"تم استلام طلبك وهو بانتظار تأكيد المتجر. لم يتم تحصيل أي مبلغ."},{status:201});
+    return NextResponse.json({ok:true,order,paymentMethod,paymentStatus:"unpaid",message:paymentMethod==="escrowly"?"تم إنشاء الطلب؛ تابع إلى صفحة الضمان لإيداع المبلغ.":"تم استلام طلبك وهو بانتظار تأكيد المتجر. لم يتم تحصيل أي مبلغ."},{status:201});
   }catch(error){
     const code=error instanceof Error?error.message:"";
-    const messages:Record<string,string>={VAULTION_USD_ONLY:"الضمان متاح حالياً للطلبات بالدولار الأمريكي فقط.",VAULTION_MINIMUM:"الحد الأدنى للضمان 50 دولاراً.",PRODUCT_NOT_FOUND:"أحد المنتجات لم يعد متاحاً.",PRODUCT_UNAVAILABLE:"أحد المنتجات غير منشور حالياً.",MIXED_CURRENCY:"لا يمكن جمع منتجات بعملات مختلفة في طلب واحد.",INSUFFICIENT_STOCK:"الكمية المطلوبة غير متوفرة في المخزون.",INVALID_PRICE:"تعذر اعتماد سعر أحد المنتجات."};
-    const status=code==="INSUFFICIENT_STOCK"?409:code==="PRODUCT_NOT_FOUND"||code==="PRODUCT_UNAVAILABLE"?409:code==="MIXED_CURRENCY"||code==="INVALID_PRICE"||code==="VAULTION_USD_ONLY"||code==="VAULTION_MINIMUM"?400:500;
+    const messages:Record<string,string>={ESCROWLY_USD_ONLY:"طلبات الضمان تتطلب أن تكون أسعار المنصة بالدولار الأمريكي حالياً.",PRODUCT_NOT_FOUND:"أحد المنتجات لم يعد متاحاً.",PRODUCT_UNAVAILABLE:"أحد المنتجات غير منشور حالياً.",MIXED_CURRENCY:"لا يمكن جمع منتجات بعملات مختلفة في طلب واحد.",INSUFFICIENT_STOCK:"الكمية المطلوبة غير متوفرة في المخزون.",INVALID_PRICE:"تعذر اعتماد سعر أحد المنتجات."};
+    const status=code==="INSUFFICIENT_STOCK"?409:code==="PRODUCT_NOT_FOUND"||code==="PRODUCT_UNAVAILABLE"?409:code==="MIXED_CURRENCY"||code==="INVALID_PRICE"||code==="ESCROWLY_USD_ONLY"?400:500;
     return NextResponse.json({error:messages[code]||"تعذر إنشاء الطلب. حاول مرة أخرى."},{status});
   }
 }

@@ -1,0 +1,16 @@
+import {NextRequest,NextResponse} from "next/server";
+import {pool,initDb} from "@/lib/db";
+import {currentCustomer} from "@/lib/customer-auth";
+export const dynamic="force-dynamic";
+export async function GET(req:NextRequest){
+ try{await initDb();const q=String(req.nextUrl.searchParams.get("q")||"").trim().slice(0,100);const category=String(req.nextUrl.searchParams.get("category")||"").trim().slice(0,100);const values:any[]=[];let where="a.status='open' AND a.ends_at>NOW()";if(q){values.push("%"+q+"%");where+=" AND (a.title LIKE $"+values.length+" OR a.description LIKE $"+values.length+")";}if(category){values.push(category);where+=" AND a.category=$"+values.length;}const r=await pool.query("SELECT a.id,a.title,a.description,a.category,a.currency,a.starting_price,a.current_price,a.ends_at,a.created_at,c.name AS owner_name,(SELECT COUNT(*) FROM v_auction_bids b WHERE b.auction_id=a.id) AS bids_count FROM v_auctions a JOIN v_customers c ON c.id=a.owner_id WHERE "+where+" ORDER BY a.ends_at ASC LIMIT 50",values);return NextResponse.json({auctions:r.rows},{headers:{"Cache-Control":"no-store"}});}catch{return NextResponse.json({error:"تعذر تحميل المزادات."},{status:500});}
+}
+export async function POST(req:NextRequest){
+ const customer=await currentCustomer();if(!customer)return NextResponse.json({error:"سجل الدخول أولاً."},{status:401});
+ try{await initDb();const a=await pool.query("SELECT account_type,email_verified_at FROM v_customers WHERE id=$1",[customer.id]);const u=a.rows[0];if(!u?.email_verified_at)return NextResponse.json({error:"أكد بريدك الإلكتروني أولاً."},{status:403});if(!["buyer","both","company"].includes(u.account_type))return NextResponse.json({error:"إنشاء المزادات متاح لأصحاب المشاريع والشركات."},{status:403});
+ const b=await req.json();const title=String(b.title||"").trim().slice(0,180),description=String(b.description||"").trim().slice(0,10000),category=String(b.category||"").trim().slice(0,100),currency=String(b.currency||"USD").toUpperCase(),starting=Number(b.startingPrice),reserve=b.reservePrice==null||b.reservePrice===""?null:Number(b.reservePrice),end=new Date(String(b.endsAt||""));
+ if(title.length<8||description.length<40||!category||!["USD","USDT","USDC"].includes(currency)||!Number.isFinite(starting)||starting<1||(reserve!==null&&(!Number.isFinite(reserve)||reserve<starting))||!Number.isFinite(end.getTime())||end.getTime()<Date.now()+3600000||end.getTime()>Date.now()+30*86400000)return NextResponse.json({error:"تحقق من العنوان والوصف والتصنيف والسعر وموعد انتهاء المزاد (بين ساعة و30 يوماً)."}, {status:400});
+ const r=await pool.query("INSERT INTO v_auctions(owner_id,title,description,category,currency,starting_price,reserve_price,current_price,ends_at,status) VALUES($1,$2,$3,$4,$5,$6,$7,$6,$8,'open')",[customer.id,title,description,category,currency,starting,reserve,end.toISOString().slice(0,19).replace("T"," ")]);
+ return NextResponse.json({ok:true,auctionId:r.insertId,status:"open"},{status:201});
+ }catch{return NextResponse.json({error:"تعذر إنشاء المزاد."},{status:500});}
+}
