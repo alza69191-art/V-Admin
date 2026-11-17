@@ -73,6 +73,10 @@ export async function POST(req: NextRequest) {
         const project = projects[0];
         if (!project || Number(project.owner_id) !== Number(customer.id) || project.status !== "open")
           throw new Error("PROJECT_NOT_AVAILABLE");
+        const [existingContracts] = await connection.execute<any[]>(
+          "SELECT id FROM v_freelance_orders WHERE project_id=? AND status IN ('creating_payment','awaiting_payment','funded','in_progress','delivered','disputed','resolution_pending') LIMIT 1 FOR UPDATE", [projectId]
+        );
+        if (existingContracts.length) throw new Error("PROJECT_ALREADY_AWARDED_OR_CHECKOUT_PENDING");
         const [bids] = await connection.execute<any[]>(
           "SELECT id,freelancer_id,amount,currency,status FROM v_project_bids WHERE id=? AND project_id=? FOR UPDATE", [bidId, projectId]
         );
@@ -88,6 +92,10 @@ export async function POST(req: NextRequest) {
         [orderRef, customer.id, sellerId, resolvedServiceId, resolvedProjectId, resolvedBidId, amount, mode]
       );
       const id = Number(insert.insertId);
+      if (resolvedBidId) {
+        const [bidUpdate] = await connection.execute<any>("UPDATE v_project_bids SET status='awaiting_payment',updated_at=NOW() WHERE id=? AND status='pending'", [resolvedBidId]);
+        if (!bidUpdate.affectedRows) throw new Error("BID_NOT_AVAILABLE");
+      }
       await connection.execute(
         "INSERT INTO v_freelance_order_events(order_id,actor,from_status,to_status,note) VALUES(?,'buyer',NULL,'creating_payment','تم إنشاء عقد بانتظار إنشاء معاملة الضمان')", [id]
       );
@@ -135,6 +143,7 @@ export async function POST(req: NextRequest) {
     const messages:Record<string,string> = {
       SERVICE_UNAVAILABLE:"الخدمة غير متاحة للشراء حالياً.",
       PROJECT_NOT_AVAILABLE:"المشروع غير متاح أو لا تملك صلاحية اختياره.",
+      PROJECT_ALREADY_AWARDED_OR_CHECKOUT_PENDING:"يوجد عقد أو عملية دفع قيد التنفيذ لهذا المشروع بالفعل.",
       BID_NOT_AVAILABLE:"العرض غير متاح أو سبق اختياره.",
       SELF_PURCHASE:"لا يمكنك شراء خدمتك أو اختيار عرضك.",
       USD_ONLY:"الضمان متاح حالياً للعقود المسعّرة بالدولار فقط.",
@@ -142,7 +151,7 @@ export async function POST(req: NextRequest) {
       ESCROWLY_AMOUNT_CONFIGURATION_INVALID:"إعداد تحويل مبلغ الضمان غير صالح.",
       ESCROWLY_FEE_PAYER_INVALID:"إعداد رسوم الضمان غير صالح."
     };
-    const status = ["SERVICE_UNAVAILABLE","PROJECT_NOT_AVAILABLE","BID_NOT_AVAILABLE","SELF_PURCHASE","USD_ONLY"].includes(code) ? 409 : 502;
+    const status = ["SERVICE_UNAVAILABLE","PROJECT_NOT_AVAILABLE","PROJECT_ALREADY_AWARDED_OR_CHECKOUT_PENDING","BID_NOT_AVAILABLE","SELF_PURCHASE","USD_ONLY"].includes(code) ? 409 : 502;
     return NextResponse.json({ error: messages[code] || code, orderId: orderId || undefined, manualReviewRequired: !!orderId }, { status, headers: { "Cache-Control": "no-store" } });
   }
 }
