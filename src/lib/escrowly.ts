@@ -20,6 +20,7 @@ export async function ensureEscrowlySchema() {
       await pool.query("ALTER TABLE v_freelance_orders ADD COLUMN IF NOT EXISTS admin_note TEXT NULL");
       await pool.query("ALTER TABLE v_freelance_orders ADD COLUMN IF NOT EXISTS admin_reviewed_at DATETIME NULL");
       await pool.query("CREATE TABLE IF NOT EXISTS v_freelance_order_events (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,order_id BIGINT UNSIGNED NOT NULL,actor VARCHAR(100) NOT NULL,from_status VARCHAR(32) NULL,to_status VARCHAR(32) NOT NULL,note VARCHAR(500) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_freelance_order_events_order(order_id))");
+      await pool.query("CREATE TABLE IF NOT EXISTS v_freelancer_payouts (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,order_id BIGINT UNSIGNED NOT NULL,seller_id BIGINT UNSIGNED NOT NULL,order_ref VARCHAR(80) NOT NULL,gross_amount DECIMAL(20,8) NOT NULL,gross_currency VARCHAR(8) NOT NULL,escrow_transaction_id VARCHAR(100) NOT NULL,escrow_mode VARCHAR(8) NOT NULL,status VARCHAR(16) NOT NULL DEFAULT 'pending',paid_amount DECIMAL(20,8) NULL,paid_currency VARCHAR(8) NULL,payout_method VARCHAR(40) NULL,payout_reference VARCHAR(180) NULL,paid_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,UNIQUE KEY uq_freelancer_payout_order(order_id),INDEX idx_freelancer_payout_seller(seller_id),INDEX idx_freelancer_payout_status(status))");
     })().catch((error) => { schemaReady = null; throw error; });
   }
   return schemaReady;

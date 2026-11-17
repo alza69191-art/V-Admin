@@ -54,3 +54,10 @@ In Escrowly Merchant Resources, create a webhook separately for Test and Live us
 Subscribe to transaction events. Copy the displayed signing secret to the matching Render environment. Test and Live webhook secrets are not interchangeable. Do not enable live mode until a complete test transaction, signed webhook delivery, funding reconciliation, and admin fulfillment gate have passed.
 
 The application deliberately does not retry an ambiguous transaction-creation request because Escrowly currently does not support an idempotency key. Existing Vaultion escrow rows are retained and flagged for manual review; they are not silently converted.
+
+ 
+## Freelancer payout ledger and settlement boundary
+
+When Escrowly reports a freelance contract as `completed`, the webhook creates one idempotent payout ledger row for the seller. Test-mode completions are recorded as `simulated` and can never be marked as paid. Live-mode rows remain `pending` until an administrator has actually sent the seller's transfer and records the amount, currency, method, and external receipt/reference in the admin-only `/api/admin/payouts` workflow.
+
+This is an auditable manual-transfer record, **not an automatic payout integration**. Escrowly Connect documentation describes merchant transactions, escrow funding, inspection, dispute resolution, and completion, but does not document a seller-wallet or split-payout API. Do not enable `ESCROWLY_LIVE_ENABLED=true` until the merchant's real settlement path and the separate seller-transfer process have been validated with real account credentials and a controlled pilot.
