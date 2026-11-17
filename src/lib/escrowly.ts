@@ -63,6 +63,11 @@ export async function readEscrowlyTransaction(transactionId: string) {
   return request("/connect/transactions/" + encodeURIComponent(transactionId), { method: "GET" });
 }
 
+export async function markEscrowlyDelivered(transactionId: string) {
+  if (!/^[a-zA-Z0-9_-]{8,120}$/.test(transactionId)) throw new Error("ESCROWLY_INVALID_TRANSACTION_ID");
+  return request("/connect/transactions/" + encodeURIComponent(transactionId) + "/mark-delivered", { method: "POST" });
+}
+
 export function verifyEscrowlySignature(rawBody: string, signature: string, secret: string) {
   if (!/^[a-f0-9]{64}$/i.test(signature) || !secret) return false;
   const signingKey = createHash("sha256").update(secret).digest("hex");
