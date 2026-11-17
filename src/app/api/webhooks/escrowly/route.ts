@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const local = localResult.rows[0];
     if (!local) {
       const freelanceResult = await pool.query<any>(
-        "SELECT id,order_ref,total,currency,escrow_status,escrow_provider,escrow_mode,status,escrow_transaction_id FROM v_freelance_orders WHERE escrow_transaction_id=$1 LIMIT 1",
+        "SELECT id,order_ref,total,currency,escrow_status,escrow_provider,escrow_mode,status,escrow_transaction_id,project_id,bid_id FROM v_freelance_orders WHERE escrow_transaction_id=$1 LIMIT 1",
         [transactionId]
       );
       const freelance = freelanceResult.rows[0];
