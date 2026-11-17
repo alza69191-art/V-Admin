@@ -10,8 +10,9 @@ export async function GET(req:NextRequest){
   const values:any[]=[];let where="p.status='open' AND p.visibility='public'";
   if(q){values.push("%"+q+"%");where+=" AND (p.title LIKE $"+values.length+" OR p.description LIKE $"+values.length+")";}
   if(category){values.push(category);where+=" AND p.category=$"+values.length;}
-  const result=await pool.query("SELECT p.id,p.title,p.description,p.budget_min,p.budget_max,p.currency,p.delivery_days,p.category,p.skills,p.created_at,c.name AS buyer_name,(SELECT COUNT(*) FROM v_project_bids b WHERE b.project_id=p.id) AS bids_count FROM v_projects p JOIN v_customers c ON c.id=p.owner_id WHERE "+where+" ORDER BY p.created_at DESC LIMIT 50",values);
-  return NextResponse.json({projects:result.rows},{headers:{"Cache-Control":"no-store"}});
+  const viewer=await currentCustomer();
+  const result=await pool.query("SELECT p.id,p.owner_id,p.title,p.description,p.budget_min,p.budget_max,p.currency,p.delivery_days,p.category,p.skills,p.created_at,c.name AS buyer_name,(SELECT COUNT(*) FROM v_project_bids b WHERE b.project_id=p.id) AS bids_count FROM v_projects p JOIN v_customers c ON c.id=p.owner_id WHERE "+where+" ORDER BY p.created_at DESC LIMIT 50",values);
+  return NextResponse.json({projects:result.rows.map((p:any)=>{const {owner_id,...safe}=p;return {...safe,is_owner:!!viewer&&Number(owner_id)===Number(viewer.id)};})},{headers:{"Cache-Control":"no-store"}});
  }catch{return NextResponse.json({error:"تعذر تحميل المشاريع."},{status:500});}
 }
 export async function POST(req:NextRequest){
