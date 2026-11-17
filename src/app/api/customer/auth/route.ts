@@ -40,7 +40,7 @@ export async function POST(req:NextRequest){
    if(password.length<10)return NextResponse.json({error:"كلمة المرور يجب ألا تقل عن 10 أحرف."},{status:400});
    const name=String(body.name||"").trim().slice(0,120);
    const accountType=String(body.accountType||"buyer");
-   if(name.length<2||!["buyer","freelancer","both"].includes(accountType))
+   if(name.length<2||!["buyer","freelancer","both","company"].includes(accountType))
     return NextResponse.json({error:"أدخل الاسم وحدد نوع الحساب"},{status:400});
    if(!process.env.RESEND_API_KEY||!process.env.RESEND_FROM_EMAIL)
     return NextResponse.json({error:"تأكيد البريد غير مهيأ بعد. يلزم إعداد خدمة البريد قبل فتح التسجيل."},{status:503});
