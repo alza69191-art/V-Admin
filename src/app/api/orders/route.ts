@@ -12,7 +12,7 @@ export async function GET(){
   if(!customer)return NextResponse.json({error:"login_required"},{status:401});
   try{
     await initDb();
-    const orders=await pool.query("SELECT id,order_number,status,currency,total,created_at FROM v_orders WHERE customer_id=$1 ORDER BY created_at DESC LIMIT 50",[customer.id]);
+    const orders=await pool.query("SELECT id,order_number,status,currency,total,shipping_phone,shipping_city,shipping_address,shipping_notes,created_at FROM v_orders WHERE customer_id=$1 ORDER BY created_at DESC LIMIT 50",[customer.id]);
     if(!orders.rows.length)return NextResponse.json([]);
     const ids=orders.rows.map((x:any)=>Number(x.id));
     const items=await pool.query(`SELECT id,order_id,title_snapshot,unit_price,quantity,line_total,currency FROM v_order_items WHERE order_id IN (${ids.map((_,i)=>"$"+(i+1)).join(",")}) ORDER BY id ASC`,ids);
@@ -33,6 +33,11 @@ export async function POST(req:NextRequest){
     if(!rate.allowed)return NextResponse.json({error:"تم تجاوز عدد المحاولات المسموح. حاول لاحقاً."},{status:429,headers:{"Retry-After":String(rate.retryAfter),"Cache-Control":"no-store"}});
     const body=await req.json();
     const paymentMethod=String(body.paymentMethod||"manual");
+    const shippingPhone=String(body.shippingPhone||"").trim().slice(0,30);
+    const shippingCity=String(body.shippingCity||"").trim().slice(0,100);
+    const shippingAddress=String(body.shippingAddress||"").trim().slice(0,500);
+    const shippingNotes=String(body.shippingNotes||"").trim().slice(0,500);
+    if(!/^\\+?[0-9\\s()-]{7,30}$/.test(shippingPhone)||shippingCity.length<2||shippingAddress.length<8) return NextResponse.json({error:"أدخل رقم هاتف صحيحاً والمدينة والعنوان التفصيلي لاستلام الطلب."},{status:400});
     if(paymentMethod!=="manual"&&paymentMethod!=="escrowly") return NextResponse.json({error:"invalid_payment_method"},{status:400});
     if(paymentMethod==="escrowly"){
       try { assertEscrowlyReady(); }
@@ -69,7 +74,7 @@ export async function POST(req:NextRequest){
       if(paymentMethod==="escrowly"&&currency!=="USD") throw new Error("ESCROWLY_USD_ONLY");
       
       const orderNumber="VC-"+Date.now().toString(36).toUpperCase()+"-"+randomBytes(3).toString("hex").toUpperCase();
-      const [insertResult]=await connection.execute<any>("INSERT INTO v_orders(order_number,customer_id,customer_name,customer_email,status,currency,total,stock_reserved) VALUES(?,?,?,?,'pending',?,?,1)",[orderNumber,customer.id,user.rows[0].name,user.rows[0].email,currency,totalCents/100]);
+      const [insertResult]=await connection.execute<any>("INSERT INTO v_orders(order_number,customer_id,customer_name,customer_email,status,currency,total,shipping_phone,shipping_city,shipping_address,shipping_notes,stock_reserved) VALUES(?,?,?,?,'pending',?,?,?,?,?,?,1)",[orderNumber,customer.id,user.rows[0].name,user.rows[0].email,currency,totalCents/100,shippingPhone,shippingCity,shippingAddress,shippingNotes||null]);
       const orderId=Number(insertResult.insertId);
       for(const line of lines){
         await connection.execute("UPDATE v_products SET stock=stock-?,updated_at=NOW() WHERE id=? AND stock>=?",[line.qty,line.product.id,line.qty]);
