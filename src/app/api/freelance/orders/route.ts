@@ -97,9 +97,9 @@ export async function POST(req: NextRequest) {
 
     const stableCurrency = String(process.env.ESCROWLY_CURRENCY || "USDT").toUpperCase();
     if (!["USDT", "USDC", "DAI"].includes(stableCurrency)) throw new Error("ESCROWLY_CURRENCY_INVALID");
-    const rate = Number(process.env.ESCROWLY_USD_RATE || "1");
-    const converted = contract.amount * rate;
-    if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(converted) || converted <= 0) throw new Error("ESCROWLY_AMOUNT_CONFIGURATION_INVALID");
+    const usdRate = Number(process.env.ESCROWLY_USD_RATE || "1");
+    const converted = contract.amount * usdRate;
+    if (!Number.isFinite(usdRate) || usdRate <= 0 || !Number.isFinite(converted) || converted <= 0) throw new Error("ESCROWLY_AMOUNT_CONFIGURATION_INVALID");
     const amount = converted.toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
     const inspectionDays = Math.min(30, Math.max(1, Number(process.env.ESCROWLY_INSPECTION_DAYS || "3")));
     const feePayer = process.env.ESCROWLY_FEE_PAYER || "buyer";
