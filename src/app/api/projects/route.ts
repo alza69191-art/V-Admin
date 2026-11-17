@@ -20,7 +20,7 @@ export async function POST(req:NextRequest){
   await initDb();
   const account=await pool.query("SELECT account_type,email_verified_at FROM v_customers WHERE id=$1",[customer.id]);
   const user=account.rows[0];if(!user?.email_verified_at)return NextResponse.json({error:"أكد بريدك الإلكتروني أولاً."},{status:403});
-  if(!["buyer","both"].includes(user.account_type))return NextResponse.json({error:"هذا الإجراء متاح لحساب المشتري فقط."},{status:403});
+  if(!["buyer","both","company"].includes(user.account_type))return NextResponse.json({error:"هذا الإجراء متاح لحساب المشتري فقط."},{status:403});
   const body=await req.json();
   const title=String(body.title||"").trim().slice(0,180),description=String(body.description||"").trim().slice(0,12000),category=String(body.category||"").trim().slice(0,100),currency=String(body.currency||"USD").toUpperCase();
   const min=body.budgetMin==null?null:Number(body.budgetMin),max=body.budgetMax==null?null:Number(body.budgetMax),days=body.deliveryDays==null?null:Number(body.deliveryDays);
