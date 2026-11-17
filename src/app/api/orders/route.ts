@@ -37,7 +37,7 @@ export async function POST(req:NextRequest){
     const shippingCity=String(body.shippingCity||"").trim().slice(0,100);
     const shippingAddress=String(body.shippingAddress||"").trim().slice(0,500);
     const shippingNotes=String(body.shippingNotes||"").trim().slice(0,500);
-    if(!/^\\+?[0-9\\s()-]{7,30}$/.test(shippingPhone)||shippingCity.length<2||shippingAddress.length<8) return NextResponse.json({error:"أدخل رقم هاتف صحيحاً والمدينة والعنوان التفصيلي لاستلام الطلب."},{status:400});
+    if(!/^\+?[0-9\\s()-]{7,30}$/.test(shippingPhone)||shippingCity.length<2||shippingAddress.length<8) return NextResponse.json({error:"أدخل رقم هاتف صحيحاً والمدينة والعنوان التفصيلي لاستلام الطلب."},{status:400});
     if(paymentMethod!=="manual"&&paymentMethod!=="escrowly") return NextResponse.json({error:"invalid_payment_method"},{status:400});
     if(paymentMethod==="escrowly"){
       try { assertEscrowlyReady(); }
