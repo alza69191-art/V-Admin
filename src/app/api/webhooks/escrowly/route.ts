@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const local = localResult.rows[0];
     if (!local) {
       const freelanceResult = await pool.query<any>(
-        "SELECT id,order_ref,total,currency,escrow_status,escrow_provider,escrow_mode,status,escrow_transaction_id,project_id,bid_id FROM v_freelance_orders WHERE escrow_transaction_id=$1 LIMIT 1",
+        "SELECT id,order_ref,buyer_id,seller_id,total,currency,escrow_status,escrow_provider,escrow_mode,status,escrow_transaction_id,project_id,bid_id FROM v_freelance_orders WHERE escrow_transaction_id=$1 LIMIT 1",
         [transactionId]
       );
       const freelance = freelanceResult.rows[0];
@@ -68,6 +68,17 @@ export async function POST(req: NextRequest) {
           "UPDATE v_freelance_orders SET escrow_status=?,status=CASE WHEN status IN ('disputed','refunded','completed','cancelled','payment_creation_uncertain') THEN status ELSE ? END WHERE id=?",
           [String(remote.status), next, Number(freelance.id)]
         );
+        if (remote.status === "completed") {
+          const payoutAmount = Number(remote.amount);
+          const payoutCurrency = String(remote.currency || "").toUpperCase();
+          if (!Number.isFinite(payoutAmount) || payoutAmount <= 0 || !/^[A-Z0-9]{2,8}$/.test(payoutCurrency)) {
+            throw new Error("ESCROWLY_COMPLETED_PAYOUT_AMOUNT_INVALID");
+          }
+          await connection.execute(
+            "INSERT IGNORE INTO v_freelancer_payouts(order_id,seller_id,order_ref,gross_amount,gross_currency,escrow_transaction_id,escrow_mode,status) VALUES(?,?,?,?,?,?,?,?)",
+            [Number(freelance.id), Number(freelance.seller_id), String(freelance.order_ref), payoutAmount, payoutCurrency, transactionId, mode, mode === "test" ? "simulated" : "pending"]
+          );
+        }
         if (remote.status === "funded" && freelance.status === "awaiting_payment") {
           const [current] = await connection.execute<any[]>("SELECT project_id,bid_id FROM v_freelance_orders WHERE id=? FOR UPDATE",[Number(freelance.id)]);
           const contract = current[0];
