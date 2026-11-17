@@ -84,8 +84,8 @@ export async function POST(req: NextRequest) {
       if (sellerId === Number(customer.id)) throw new Error("SELF_PURCHASE");
       if (currency !== "USD" || !Number.isFinite(amount) || amount <= 0) throw new Error("USD_ONLY");
       const [insert] = await connection.execute<any>(
-        "INSERT INTO v_freelance_orders(order_ref,buyer_id,seller_id,service_id,project_id,bid_id,total,currency,status,escrow_provider,escrow_status) VALUES(?,?,?,?,?,?,?,'USD','creating_payment','escrowly','creating')",
-        [orderRef, customer.id, sellerId, resolvedServiceId, resolvedProjectId, resolvedBidId, amount]
+        "INSERT INTO v_freelance_orders(order_ref,buyer_id,seller_id,service_id,project_id,bid_id,total,currency,status,escrow_provider,escrow_status,escrow_mode) VALUES(?,?,?,?,?,?,?,'USD','creating_payment','escrowly','creating',?)",
+        [orderRef, customer.id, sellerId, resolvedServiceId, resolvedProjectId, resolvedBidId, amount, mode]
       );
       const id = Number(insert.insertId);
       await connection.execute(
