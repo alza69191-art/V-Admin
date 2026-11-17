@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initDb, pool } from "@/lib/db";
+import { initDb, pool, withTransaction } from "@/lib/db";
 import { assertEscrowlyReady, ensureEscrowlySchema, readEscrowlyTransaction, sameMoney, validEscrowlyStatus, verifyEscrowlySignature } from "@/lib/escrowly";
 
 export const dynamic = "force-dynamic";
@@ -47,24 +47,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "transaction_reconciliation_failed" }, { status: 409 });
     }
 
-    const inserted = await pool.query(
-      "INSERT IGNORE INTO v_escrowly_webhook_events(event_id,transaction_id,event_type,mode) VALUES($1,$2,$3,$4)",
-      [eventId, transactionId, eventType, mode]
-    );
-    if (!inserted.rowCount) return NextResponse.json({ ok: true, duplicate: true });
-
-    await pool.query(
-      "UPDATE v_order_escrows SET status=$1,network=$2,tx_hash=$3 WHERE transaction_id=$4",
-      [remote.status, remote.network || null, remote.blockchain_tx_hash || null, transactionId]
-    );
-    if (remote.status === "funded") {
-      await pool.query("UPDATE v_orders SET status='paid',updated_at=NOW() WHERE id=$1 AND status IN ('pending','awaiting_payment')", [Number(local.order_id)]);
-      await pool.query(
-        "INSERT INTO v_order_events(order_id,actor,from_status,to_status,note) VALUES($1,'escrowly',NULL,'paid','Escrowly confirmed funds secured in escrow')",
-        [Number(local.order_id)]
+    // Persist the event and all related order changes atomically. If any write fails,
+    // the event insert rolls back so Escrowly's retry can safely process it again.
+    const result = await withTransaction(async (connection) => {
+      const [insertResult] = await connection.execute<any>(
+        "INSERT IGNORE INTO v_escrowly_webhook_events(event_id,transaction_id,event_type,mode) VALUES(?,?,?,?)",
+        [eventId, transactionId, eventType, mode]
       );
-    }
-    return NextResponse.json({ ok: true });
+      if (!insertResult.affectedRows) return { duplicate: true };
+
+      await connection.execute(
+        "UPDATE v_order_escrows SET status=?,network=?,tx_hash=? WHERE transaction_id=?",
+        [remote.status, remote.network || null, remote.blockchain_tx_hash || null, transactionId]
+      );
+      if (remote.status === "funded") {
+        const [orderUpdate] = await connection.execute<any>(
+          "UPDATE v_orders SET status='paid',updated_at=NOW() WHERE id=? AND status IN ('pending','awaiting_payment')",
+          [Number(local.order_id)]
+        );
+        if (orderUpdate.affectedRows > 0) {
+          await connection.execute(
+            "INSERT INTO v_order_events(order_id,actor,from_status,to_status,note) VALUES(?,'escrowly',NULL,'paid','Escrowly confirmed funds secured in escrow')",
+            [Number(local.order_id)]
+          );
+        }
+      }
+      return { duplicate: false };
+    });
+    return NextResponse.json({ ok: true, duplicate: result.duplicate });
   } catch (error) {
     const code = error instanceof Error ? error.message : "webhook_processing_failed";
     return NextResponse.json({ error: code }, { status: 500 });
