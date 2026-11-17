@@ -34,7 +34,57 @@ export async function POST(req: NextRequest) {
       [transactionId]
     );
     const local = localResult.rows[0];
-    if (!local) return NextResponse.json({ error: "transaction_not_found" }, { status: 404 });
+    if (!local) {
+      const freelanceResult = await pool.query<any>(
+        "SELECT id,order_ref,total,currency,escrow_status,escrow_provider,status,escrow_transaction_id FROM v_freelance_orders WHERE escrow_transaction_id=$1 LIMIT 1",
+        [transactionId]
+      );
+      const freelance = freelanceResult.rows[0];
+      if (!freelance) return NextResponse.json({ error: "transaction_not_found" }, { status: 404 });
+      if (String(freelance.escrow_provider) !== "escrowly") return NextResponse.json({ error: "transaction_provider_mismatch" }, { status: 409 });
+
+      const remote: any = await readEscrowlyTransaction(transactionId);
+      if (String(remote?.id) !== transactionId || !validEscrowlyStatus(remote?.status) ||
+          String(remote?.mode || mode) !== mode ||
+          String(remote?.currency || "").toUpperCase() !== String(process.env.ESCROWLY_CURRENCY || "USDT").toUpperCase() ||
+          !sameMoney(remote?.amount, Number(freelance.total) * Number(process.env.ESCROWLY_USD_RATE || "1")) ||
+          String(remote?.metadata?.freelance_order_id || "") !== String(freelance.id) ||
+          String(remote?.metadata?.order_ref || "") !== String(freelance.order_ref)) {
+        return NextResponse.json({ error: "freelance_transaction_reconciliation_failed" }, { status: 409 });
+      }
+
+      const nextStatus:Record<string,string> = {
+        funded:"funded", completed:"completed", disputed:"disputed", refunded:"refunded",
+        resolved:"resolution_pending", cancelled:"cancelled", expired:"cancelled"
+      };
+      const next = nextStatus[String(remote.status)] || String(freelance.status);
+      const result = await withTransaction(async (connection) => {
+        const [insertResult] = await connection.execute<any>(
+          "INSERT IGNORE INTO v_escrowly_webhook_events(event_id,transaction_id,event_type,mode) VALUES(?,?,?,?)",
+          [eventId, transactionId, eventType, mode]
+        );
+        if (!insertResult.affectedRows) return { duplicate: true };
+        await connection.execute(
+          "UPDATE v_freelance_orders SET escrow_status=?,status=CASE WHEN status IN ('disputed','refunded','completed','cancelled','payment_creation_uncertain') THEN status ELSE ? END WHERE id=?",
+          [String(remote.status), next, Number(freelance.id)]
+        );
+        if (remote.status === "funded" && freelance.status === "awaiting_payment") {
+          const [current] = await connection.execute<any[]>("SELECT project_id,bid_id FROM v_freelance_orders WHERE id=? FOR UPDATE",[Number(freelance.id)]);
+          const contract = current[0];
+          if (contract?.project_id && contract?.bid_id) {
+            await connection.execute("UPDATE v_project_bids SET status='accepted',updated_at=NOW() WHERE id=? AND project_id=? AND status='pending'",[contract.bid_id,contract.project_id]);
+            await connection.execute("UPDATE v_project_bids SET status='rejected',updated_at=NOW() WHERE project_id=? AND id<>? AND status='pending'",[contract.project_id,contract.bid_id]);
+            await connection.execute("UPDATE v_projects SET status='in_progress',updated_at=NOW() WHERE id=? AND status='open'",[contract.project_id]);
+          }
+        }
+        await connection.execute(
+          "INSERT INTO v_freelance_order_events(order_id,actor,from_status,to_status,note) VALUES(?,'escrowly',?,?,?)",
+          [Number(freelance.id),String(freelance.status),next,"تمت مزامنة حالة الضمان من حدث Escrowly: "+String(remote.status)]
+        );
+        return { duplicate: false };
+      });
+      return NextResponse.json({ ok: true, duplicate: result.duplicate, type: "freelance" });
+    }
     if (String(local.mode) !== mode) return NextResponse.json({ error: "transaction_mode_mismatch" }, { status: 409 });
 
     // A signed webhook is authenticated, but we still reconcile against Escrowly's authenticated transaction read.
