@@ -12,6 +12,11 @@ export async function ensureEscrowlySchema() {
       await pool.query("ALTER TABLE v_order_escrows ADD COLUMN IF NOT EXISTS amount DECIMAL(20,8) NULL");
       await pool.query("ALTER TABLE v_order_escrows ADD COLUMN IF NOT EXISTS mode VARCHAR(8) NULL");
       await pool.query("CREATE TABLE IF NOT EXISTS v_escrowly_webhook_events (event_id VARCHAR(120) NOT NULL PRIMARY KEY, transaction_id VARCHAR(100) NOT NULL, event_type VARCHAR(80) NOT NULL, mode VARCHAR(8) NOT NULL, received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_escrowly_event_tx(transaction_id))");
+      await pool.query("ALTER TABLE v_freelance_orders ADD COLUMN IF NOT EXISTS bid_id BIGINT UNSIGNED NULL");
+      await pool.query("ALTER TABLE v_freelance_orders ADD COLUMN IF NOT EXISTS escrow_checkout_url VARCHAR(512) NULL");
+      await pool.query("ALTER TABLE v_freelance_orders ADD COLUMN IF NOT EXISTS delivered_at DATETIME NULL");
+      await pool.query("ALTER TABLE v_freelance_orders ADD COLUMN IF NOT EXISTS disputed_at DATETIME NULL");
+      await pool.query("CREATE TABLE IF NOT EXISTS v_freelance_order_events (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,order_id BIGINT UNSIGNED NOT NULL,actor VARCHAR(100) NOT NULL,from_status VARCHAR(32) NULL,to_status VARCHAR(32) NOT NULL,note VARCHAR(500) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_freelance_order_events_order(order_id))");
     })().catch((error) => { schemaReady = null; throw error; });
   }
   return schemaReady;
