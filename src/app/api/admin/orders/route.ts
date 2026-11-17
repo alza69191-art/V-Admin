@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {pool,initDb,withTransaction} from "@/lib/db";
 import {isAdmin} from "@/lib/auth";
 export const dynamic="force-dynamic";
-const transitions:Record<string,string[]>={pending:["confirmed","cancelled"],paid:["confirmed","cancelled"],confirmed:["processing","cancelled"],processing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
+const transitions:Record<string,string[]>={pending:["paid","cancelled"],paid:["confirmed","cancelled"],confirmed:["processing","cancelled"],processing:["shipped","cancelled"],shipped:["completed"],completed:[],cancelled:[]};
 export async function GET(){
  if(!await isAdmin()) return NextResponse.json({error:"unauthorized"},{status:401});
  await initDb();
@@ -28,6 +28,7 @@ export async function PATCH(req:NextRequest){
    if(!transitions[String(order.status)]?.includes(next))throw new Error("INVALID_TRANSITION");
    const [escrowRows]=await connection.execute<any[]>("SELECT status FROM v_order_escrows WHERE order_id=? LIMIT 1",[id]);
    const escrowStatus=String(escrowRows[0]?.status||"");
+   if(next==="paid"&&(escrowRows.length||body.paymentVerified!==true||String(body.note||"").trim().length<5))throw new Error("MANUAL_PAYMENT_VERIFICATION_REQUIRED");
    if(["confirmed","processing","shipped"].includes(next)&&escrowRows.length&&escrowStatus!=="funded")throw new Error("ESCROW_NOT_FUNDED");
    if(next==="cancelled"&&["funded","disputed","inspection_expiring"].includes(escrowStatus))throw new Error("ESCROW_REQUIRES_RESOLUTION");
    if(next==="cancelled"&&Number(order.stock_reserved)===1){
@@ -41,6 +42,6 @@ export async function PATCH(req:NextRequest){
   return NextResponse.json({ok:true,order:result});
  }catch(error){
   const code=error instanceof Error?error.message:"";
-  return NextResponse.json({error:code==="NOT_FOUND"?"الطلب غير موجود.":code==="INVALID_TRANSITION"?"انتقال الحالة غير مسموح.":code==="ESCROW_NOT_FUNDED"?"لا يمكن تنفيذ الطلب قبل تأكيد حجز الأموال في الضمان.":code==="ESCROW_REQUIRES_RESOLUTION"?"الأموال محجوزة أو يوجد نزاع. يجب حل الضمان عبر Escrowly قبل إلغاء الطلب.":"تعذر تحديث الطلب."},{status:["NOT_FOUND","INVALID_TRANSITION","ESCROW_NOT_FUNDED","ESCROW_REQUIRES_RESOLUTION"].includes(code)?409:500});
+  return NextResponse.json({error:code==="NOT_FOUND"?"الطلب غير موجود.":code==="INVALID_TRANSITION"?"انتقال الحالة غير مسموح.":code==="ESCROW_NOT_FUNDED"?"لا يمكن تنفيذ الطلب قبل تأكيد حجز الأموال في الضمان.":code==="ESCROW_REQUIRES_RESOLUTION"?"الأموال محجوزة أو يوجد نزاع. يجب حل الضمان عبر Escrowly قبل إلغاء الطلب.":code==="MANUAL_PAYMENT_VERIFICATION_REQUIRED"?"لا يمكن تأكيد الدفع يدوياً دون توثيق استلامه بملاحظة واضحة، ولا يمكن تجاوز حالة Escrowly.":"تعذر تحديث الطلب."},{status:["NOT_FOUND","INVALID_TRANSITION","ESCROW_NOT_FUNDED","ESCROW_REQUIRES_RESOLUTION","MANUAL_PAYMENT_VERIFICATION_REQUIRED"].includes(code)?409:500});
  }
 }
