@@ -32,6 +32,13 @@ jobs:
         run: npm audit --audit-level=high
 
       - name: Production build
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 4000
+          DB_USER: ci
+          DB_PASSWORD: ci-placeholder
+          DB_NAME: vcommerce_ci
+          DB_SSL: "false"
         run: npm run build
 
       - name: Commit generated lockfile and Next.js optional SWC entries
