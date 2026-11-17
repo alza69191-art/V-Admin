@@ -1,0 +1,6 @@
+import {NextRequest,NextResponse} from "next/server";
+import {pool,initDb} from "@/lib/db";
+import {isAdmin} from "@/lib/auth";
+export const dynamic="force-dynamic";
+export async function GET(){if(!await isAdmin())return NextResponse.json({error:"unauthorized"},{status:401});try{await initDb();const r=await pool.query("SELECT a.*,c.name AS owner_name,c.email AS owner_email,(SELECT COUNT(*) FROM v_auction_bids b WHERE b.auction_id=a.id) AS bids_count FROM v_auctions a JOIN v_customers c ON c.id=a.owner_id ORDER BY a.created_at DESC LIMIT 200");return NextResponse.json(r.rows,{headers:{"Cache-Control":"no-store"}});}catch{return NextResponse.json({error:"تعذر تحميل المزادات."},{status:500});}}
+export async function PATCH(req:NextRequest){if(!await isAdmin())return NextResponse.json({error:"unauthorized"},{status:401});try{await initDb();const b=await req.json(),id=Number(b.id),status=String(b.status||"");if(!Number.isSafeInteger(id)||id<1||!["open","paused","cancelled","completed"].includes(status))return NextResponse.json({error:"invalid_request"},{status:400});const r=await pool.query("UPDATE v_auctions SET status=$1 WHERE id=$2",[status,id]);if(!r.rowCount)return NextResponse.json({error:"المزاد غير موجود."},{status:404});return NextResponse.json({ok:true});}catch{return NextResponse.json({error:"تعذر تحديث المزاد."},{status:500});}}
