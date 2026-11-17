@@ -36,12 +36,12 @@ export async function POST(req: NextRequest) {
     const local = localResult.rows[0];
     if (!local) {
       const freelanceResult = await pool.query<any>(
-        "SELECT id,order_ref,total,currency,escrow_status,escrow_provider,status,escrow_transaction_id FROM v_freelance_orders WHERE escrow_transaction_id=$1 LIMIT 1",
+        "SELECT id,order_ref,total,currency,escrow_status,escrow_provider,escrow_mode,status,escrow_transaction_id FROM v_freelance_orders WHERE escrow_transaction_id=$1 LIMIT 1",
         [transactionId]
       );
       const freelance = freelanceResult.rows[0];
       if (!freelance) return NextResponse.json({ error: "transaction_not_found" }, { status: 404 });
-      if (String(freelance.escrow_provider) !== "escrowly") return NextResponse.json({ error: "transaction_provider_mismatch" }, { status: 409 });
+      if (String(freelance.escrow_provider) !== "escrowly" || String(freelance.escrow_mode) !== mode) return NextResponse.json({ error: "transaction_provider_or_mode_mismatch" }, { status: 409 });
 
       const remote: any = await readEscrowlyTransaction(transactionId);
       if (String(remote?.id) !== transactionId || !validEscrowlyStatus(remote?.status) ||
