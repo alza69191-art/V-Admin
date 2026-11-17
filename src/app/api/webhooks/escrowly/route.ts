@@ -72,10 +72,13 @@ export async function POST(req: NextRequest) {
           const [current] = await connection.execute<any[]>("SELECT project_id,bid_id FROM v_freelance_orders WHERE id=? FOR UPDATE",[Number(freelance.id)]);
           const contract = current[0];
           if (contract?.project_id && contract?.bid_id) {
-            await connection.execute("UPDATE v_project_bids SET status='accepted',updated_at=NOW() WHERE id=? AND project_id=? AND status='pending'",[contract.bid_id,contract.project_id]);
-            await connection.execute("UPDATE v_project_bids SET status='rejected',updated_at=NOW() WHERE project_id=? AND id<>? AND status='pending'",[contract.project_id,contract.bid_id]);
+            await connection.execute("UPDATE v_project_bids SET status='accepted',updated_at=NOW() WHERE id=? AND project_id=? AND status IN ('pending','awaiting_payment')",[contract.bid_id,contract.project_id]);
+            await connection.execute("UPDATE v_project_bids SET status='rejected',updated_at=NOW() WHERE project_id=? AND id<>? AND status IN ('pending','awaiting_payment')",[contract.project_id,contract.bid_id]);
             await connection.execute("UPDATE v_projects SET status='in_progress',updated_at=NOW() WHERE id=? AND status='open'",[contract.project_id]);
           }
+        }
+        if ((remote.status === "cancelled" || remote.status === "expired") && freelance.project_id && freelance.bid_id) {
+          await connection.execute("UPDATE v_project_bids SET status='pending',updated_at=NOW() WHERE id=? AND status='awaiting_payment'",[Number(freelance.bid_id)]);
         }
         await connection.execute(
           "INSERT INTO v_freelance_order_events(order_id,actor,from_status,to_status,note) VALUES(?,'escrowly',?,?,?)",
